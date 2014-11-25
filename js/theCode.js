@@ -51,6 +51,7 @@ function publishData(image)
 function parseImageData(byte16Array, length, byte8Array)
 {
 	var i = 0, c = 0, result = "";
+	parseTime = new Date().getTime();
 	while (i < length)
 	{
 		switch ((byte16Array[i] << 16) + byte16Array[i + 1])
@@ -97,21 +98,9 @@ function parseImageData(byte16Array, length, byte8Array)
 			case 0x60001202:	dicomOverlay.overlayGreen = byte16Array[i + 4]; i += 4; break;
 			case 0x60001203:	dicomOverlay.overlayBlue = byte16Array[i + 4]; i += 4; break;
 			
-/*			case 0x60020010:	alert(1); break;
-			case 0x60040010:	alert(1); break;
-			case 0x60060010:	alert(1); break;
-			case 0x60080010:	alert(1); break;
-			case 0x600A0010:	alert(1); break;
-			case 0x600C0010:	alert(1); break;
-			case 0x600E0010:	alert(1); break;
-			case 0x60100010:	alert(1); break;
-			case 0x60120010:	alert(1); break;
-			case 0x60140010:	alert(1); break;
-			case 0x60160010:	alert(1); break;
-			case 0x60180010:	alert(1); break;
-			case 0x601A0010:	alert(1); break;
-			case 0x601C0010:	alert(1); break;
-			case 0x601E0010:	alert(1); break;*/
+			case 0x60020010: case 0x60040010: case 0x60060010: case 0x60080010: case 0x600A0010:
+			case 0x600C0010: case 0x600E0010: case 0x60100010: case 0x60120010: case 0x60140010:
+			case 0x60160010: case 0x60180010: case 0x601A0010: case 0x601C0010: case 0x601E0010: alert(1); break;
 			
 			
 			
@@ -120,7 +109,18 @@ function parseImageData(byte16Array, length, byte8Array)
 								parseIcon = true;
 								break;
 			case 0x7FE00000:	currentImage.pixelDataGroupLength = (byte16Array[i + 4] << 16) + byte16Array[i + 5]; i += 5; break;
-			case 0x7FE00010:	currentImage.pixelData = byte8Array.subarray((i + 6) * 2, (i + 6) * 2 + (currentImage.width * currentImage.height) * 3);
+			case 0x7FE00010:	if(currentImage.bitsAllocated == 8)
+								{
+									currentImage.pixelData = byte8Array.subarray((i + 6) * 2, (i + 6) * 2 + (currentImage.width * currentImage.height) * currentImage.spp);
+									i += 6 + (currentImage.width * currentImage.height * currentImage.spp) / 2;
+								}
+								else if(currentImage.bitsAllocated == 16)
+								{
+									currentImage.pixelData = byte16Array.subarray((i + 6), (i + 6) + (currentImage.width * currentImage.height) * currentImage.spp);
+									i += 6 + currentImage.width * currentImage.height * currentImage.spp;
+								}
+								else alert("Bits allocated: " + currentImage.bitsAllocated + "????");
+								
 								if(parseIcon)
 								{
 									dicomIcon = currentImage;
@@ -133,10 +133,9 @@ function parseImageData(byte16Array, length, byte8Array)
 	}
 }
 
-function drawImage(image)
+function drawImage(image, left)
 {
 	publishData(image);
-	parseTime = new Date().getTime() - parseTime;
 	//			i = (i + 6) * 2; 	//for 8 bits array mode
 	var canvas = document.getElementById("canvas").getContext("2d");
 	var canvasData = canvas.createImageData(image.height, image.width);
@@ -175,11 +174,23 @@ function drawImage(image)
 		}
 	}
 								
-	canvas.clearRect(0, 0, 800, 500);
-	canvas.putImageData(canvasData, 0, 0);
+	canvas.clearRect(left, 0, 950, 700 );
+	canvas.putImageData(canvasData, left, 0);
 								
 	$("#status").text("Parse time: " + parseTime + "ms, Image draw time: " + (new Date().getTime() - startTime) + "ms");
 	return;
+}
+
+function reset()
+{
+	dicomDocument = {};
+
+	dicomStudy = {};
+	dicomImage = {};
+	dicomPatient = {};
+	dicomOverlay = {};
+	dicomIcon = {};
+	parseIcon = false;
 }
 
 function readFile(file)
@@ -187,17 +198,23 @@ function readFile(file)
 	var reader = new FileReader();
 	reader.onload = function(file)
 	{
+		reset();
 		var arrayBuffer = reader.result;
         var byte16Array = new Uint16Array(arrayBuffer);
 		var byte8Array = new Uint8Array(arrayBuffer);
 		parseImageData(byte16Array, byte16Array.length, byte8Array);
-		drawImage(dicomImage);
+		parseTime = new Date().getTime() - parseTime;
+		dicomImage = currentImage;
+		if(dicomIcon.width !== undefined)
+		{
+			drawImage(dicomIcon, 0);
+		}
+		drawImage(dicomImage, dicomIcon.width !== undefined ? dicomIcon.width + 50 : 0);
 		
         var kb = byte16Array.length / 1024;
         var mb = kb / 1024;
         var byteStr = mb > 1 ? mb.toFixed(3) + " MB" : kb.toFixed(0) + " KB";
 	}
-	parseTime = new Date().getTime();
 	reader.readAsArrayBuffer(file);
 }
 
